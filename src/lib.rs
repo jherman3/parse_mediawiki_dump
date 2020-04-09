@@ -176,7 +176,8 @@ impl<R: BufRead> Iterator for Parser<R> {
 
 fn match_namespace(namespace: Option<&[u8]>) -> bool {
     match namespace {
-        None => false,
+        // Skip none check for parse_page to work.
+        None => true,
         Some(namespace) => namespace == b"http://www.mediawiki.org/xml/export-0.10/" as &[u8],
     }
 }
@@ -203,6 +204,7 @@ fn next(parser: &mut Parser<impl BufRead>) -> Result<Option<Page>, Error> {
             .reader
             .read_namespaced_event(&mut parser.buffer, &mut parser.namespace_buffer)?
         {
+            (_, Event::Eof) => return Ok(None), // TODO
             (_, Event::End(_)) => return Ok(None),
             (namespace, Event::Start(event)) => {
                 match_namespace(namespace) && event.local_name() == b"page"
@@ -315,6 +317,18 @@ pub fn parse<R: BufRead>(source: R) -> Parser<R> {
         namespace_buffer: vec![],
         reader,
         started: false,
+    }
+}
+
+/// Creates a parser from the stream that assumes the pages have already started
+pub fn parse_pages<R: BufRead>(source: R) -> Parser<R> {
+    let mut reader = Reader::from_reader(source);
+    reader.expand_empty_elements(true);
+    Parser {
+        buffer: vec![],
+        namespace_buffer: b"http://www.mediawiki.org/xml/export-0.10/".to_vec(),
+        reader,
+        started: true,
     }
 }
 
